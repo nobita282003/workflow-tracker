@@ -3,6 +3,7 @@ const Task = require('../models/Task');
 const Project = require('../models/Project');
 const AppError = require('../utils/appError');
 const catchAsync = require('../utils/catchAsync');
+const { createAndSendNotification } = require('../utils/notificationHelper');
 
 const createComment = catchAsync(async (req, res, next) => {
   const { taskId, content } = req.body;
@@ -30,6 +31,30 @@ const createComment = catchAsync(async (req, res, next) => {
     userId: req.user._id,
     content
   });
+
+  if (task.assignee && task.assignee.toString() !== req.user._id.toString()) {
+    await createAndSendNotification({
+      recipientId: task.assignee,
+      senderId: req.user._id,
+      type: 'NEW_COMMENT',
+      title: 'Binh luan moi tren cong viec',
+      message: `${req.user.name} da binh luan: "${content.substring(0, 30)}..."`,
+      relatedEntityId: task._id,
+      relatedEntityType: 'Task'
+    });
+  }
+
+  if (task.reviewer && task.reviewer.toString() !== req.user._id.toString()) {
+    await createAndSendNotification({
+      recipientId: task.reviewer,
+      senderId: req.user._id,
+      type: 'NEW_COMMENT',
+      title: 'Binh luan moi tren cong viec',
+      message: `${req.user.name} da binh luan: "${content.substring(0, 30)}..."`,
+      relatedEntityId: task._id,
+      relatedEntityType: 'Task'
+    });
+  }
 
   res.status(201).json({
     status: 'success',

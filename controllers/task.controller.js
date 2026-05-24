@@ -4,6 +4,7 @@ const Comment = require('../models/Comment');
 const AuditLog = require('../models/AuditLog');
 const AppError = require('../utils/appError');
 const catchAsync = require('../utils/catchAsync');
+const { createAndSendNotification } = require('../utils/notificationHelper');
 
 const createTask = catchAsync(async (req, res, next) => {
   const { projectId, title, description, assignee, reviewer, priority, dueDate } = req.body;
@@ -31,6 +32,18 @@ const createTask = catchAsync(async (req, res, next) => {
     priority,
     dueDate
   });
+
+  if (assignee) {
+    await createAndSendNotification({
+      recipientId: assignee,
+      senderId: req.user._id,
+      type: 'TASK_ASSIGNED',
+      title: 'Cong viec moi duoc giao',
+      message: `Ban duoc giao cong viec: "${title}"`,
+      relatedEntityId: newTask._id,
+      relatedEntityType: 'Task'
+    });
+  }
 
   res.status(201).json({
     status: 'success',
@@ -178,6 +191,18 @@ const updateTaskStatus = catchAsync(async (req, res, next) => {
     task.status = 'In Progress';
     await task.save();
 
+    if (task.assignee) {
+      await createAndSendNotification({
+        recipientId: task.assignee,
+        senderId: req.user._id,
+        type: 'TASK_REJECTED',
+        title: 'Cong viec bi tu choi',
+        message: `Cong viec "${task.title}" da bi tu choi voi ly do: "${rejectionReason}"`,
+        relatedEntityId: task._id,
+        relatedEntityType: 'Task'
+      });
+    }
+
     return res.status(200).json({
       status: 'success',
       message: 'Cong viec da bi tu choi va chuyen nguoc lai ve trang thai In Progress',
@@ -198,6 +223,28 @@ const updateTaskStatus = catchAsync(async (req, res, next) => {
     oldValue: oldStatus,
     newValue: status
   });
+
+  if (status === 'In Review' && task.reviewer) {
+    await createAndSendNotification({
+      recipientId: task.reviewer,
+      senderId: req.user._id,
+      type: 'TASK_IN_REVIEW',
+      title: 'Cong viec cho duyet',
+      message: `Cong viec "${task.title}" da duoc chuyen sang cho duyet`,
+      relatedEntityId: task._id,
+      relatedEntityType: 'Task'
+    });
+  } else if (status === 'Completed' && task.assignee) {
+    await createAndSendNotification({
+      recipientId: task.assignee,
+      senderId: req.user._id,
+      type: 'TASK_COMPLETED',
+      title: 'Cong viec hoan thanh',
+      message: `Cong viec "${task.title}" da hoan thanh`,
+      relatedEntityId: task._id,
+      relatedEntityType: 'Task'
+    });
+  }
 
   res.status(200).json({
     status: 'success',
